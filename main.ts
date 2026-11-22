@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { setFlagsFromString } from 'node:v8';
 
 // Match the house baseline's V8 setting before loading the parser.
-setFlagsFromString('--no-incremental-marking');
+setFlagsFromString('--no-incremental-marking --no-opt');
 
 const { run } = (await import(new URL('./solve.js', import.meta.url).href)) as { run: (input: unknown) => unknown };
 const INPUT_DIR = process.env.MAKEFUN_INPUT_DIR ?? '/input';
