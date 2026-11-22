@@ -36,6 +36,44 @@ export function run(input) {
     errors.push({ code, line: recordLine, row: recordRow });
   }
 
+  // Fast path for a plain unquoted field; lone CR falls back to full recovery logic.
+  function readPlain() {
+    const start = pos;
+    const next = wasm.next_special(pos, length, 0);
+    if (next === length) {
+      fieldValue = text.slice(start);
+      pos = length;
+      fieldEnd = END;
+      fieldAdded = 0;
+      return END;
+    }
+    const code = text.charCodeAt(next);
+    if (code === 44) {
+      fieldValue = text.slice(start, next);
+      pos = next + 1;
+      fieldEnd = COMMA;
+      fieldAdded = 0;
+      return COMMA;
+    }
+    if (code === 10) {
+      fieldValue = text.slice(start, next);
+      pos = next + 1;
+      line += 1;
+      fieldEnd = LINE_BREAK;
+      fieldAdded = 0;
+      return LINE_BREAK;
+    }
+    if (next + 1 < length && text.charCodeAt(next + 1) === 10) {
+      fieldValue = text.slice(start, next);
+      pos = next + 2;
+      line += 1;
+      fieldEnd = LINE_BREAK;
+      fieldAdded = 0;
+      return LINE_BREAK;
+    }
+    return readUnquoted('');
+  }
+
   // Read one unquoted field, optionally appending to an already-decoded quoted value.
   // A single scan finds the next structural character without repeated indexOf passes.
   function readUnquoted(base, trackAdded = false) {
@@ -223,7 +261,7 @@ export function run(input) {
     let ended;
     do {
       quoted = pos < length && text.charCodeAt(pos) === 34;
-      ended = quoted ? readQuoted() : readUnquoted('');
+      ended = quoted ? readQuoted() : readPlain();
       fields.push(fieldValue);
     } while (ended === COMMA);
 
