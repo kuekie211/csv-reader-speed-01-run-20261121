@@ -1,3 +1,13 @@
+import { readFileSync as readWasmFile } from 'node:fs';
+const wasmModule = new WebAssembly.Module(readWasmFile(new URL('./csv-wasm-scan.wasm', import.meta.url)));
+const wasm = new WebAssembly.Instance(wasmModule).exports;
+function wasmCopyText(text) {
+  const ptr = wasm.ensure_capacity(text.length);
+  if (ptr === 0 || ptr !== wasm.input_ptr()) throw new Error('WASM input allocation failed');
+  const view = Buffer.from(wasm.memory.buffer, ptr, text.length * 2);
+  const written = view.write(text, 0, view.length, 'utf16le');
+  if (written !== view.length) throw new Error('WASM UTF-16 copy length mismatch');
+}
 // Fast, dependency-free drop-in for make.fun csv-reader 1.0.0.
 // The parser preserves the reference's recovery rules for malformed CSV.
 
@@ -8,6 +18,7 @@ const END = 2;
 export function run(input) {
   const text = String(input.text);
   const length = text.length;
+  wasmCopyText(text);
   const hasHeader = input.header === true;
   const errors = [];
   const rows = [];
@@ -33,13 +44,8 @@ export function run(input) {
     let added = 0;
 
     for (;;) {
-      let next = pos;
-      let code = 0;
-      while (next < length) {
-        code = text.charCodeAt(next);
-        if (code === 44 || code === 10 || code === 13) break;
-        next++;
-      }
+      const next = wasm.next_special(pos, length, 0);
+      const code = next < length ? text.charCodeAt(next) : 0;
 
       if (next === length) {
         if (trackAdded) added += length - segment;
@@ -118,13 +124,8 @@ export function run(input) {
     let close = -1;
 
     while (pos < length) {
-      let next = pos;
-      let code = 0;
-      while (next < length) {
-        code = text.charCodeAt(next);
-        if (code === 34 || code === 13 || code === 10) break;
-        next++;
-      }
+      const next = wasm.next_special(pos, length, 1);
+      const code = next < length ? text.charCodeAt(next) : 0;
       if (next === length) {
         pos = length;
         break;
