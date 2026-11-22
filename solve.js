@@ -26,21 +26,23 @@ export function run(input) {
   }
 
   // Read one unquoted field, optionally appending to an already-decoded quoted value.
-  // indexOf jumps directly between structural characters; ordinary field contents are copied once.
-  function readUnquoted(base) {
+  // A single scan finds the next structural character without repeated indexOf passes.
+  function readUnquoted(base, trackAdded = false) {
     let segment = pos;
     let chunks = null;
     let added = 0;
 
     for (;;) {
-      let next = text.indexOf(',', pos);
-      const lf = text.indexOf('\n', pos);
-      if (lf !== -1 && (next === -1 || lf < next)) next = lf;
-      const cr = text.indexOf('\r', pos);
-      if (cr !== -1 && (next === -1 || cr < next)) next = cr;
+      let next = pos;
+      let code = 0;
+      while (next < length) {
+        code = text.charCodeAt(next);
+        if (code === 44 || code === 10 || code === 13) break;
+        next++;
+      }
 
-      if (next === -1) {
-        added += length - segment;
+      if (next === length) {
+        if (trackAdded) added += length - segment;
         const tail = text.slice(segment);
         if (chunks === null) fieldValue = base + tail;
         else {
@@ -49,13 +51,12 @@ export function run(input) {
         }
         pos = length;
         fieldEnd = END;
-        fieldAdded = added;
+        fieldAdded = trackAdded ? added : 0;
         return END;
       }
 
-      const code = text.charCodeAt(next);
       if (code === 44) {
-        added += next - segment;
+        if (trackAdded) added += next - segment;
         const tail = text.slice(segment, next);
         if (chunks === null) fieldValue = base + tail;
         else {
@@ -64,12 +65,12 @@ export function run(input) {
         }
         pos = next + 1;
         fieldEnd = COMMA;
-        fieldAdded = added;
+        fieldAdded = trackAdded ? added : 0;
         return COMMA;
       }
 
       if (code === 10) {
-        added += next - segment;
+        if (trackAdded) added += next - segment;
         const tail = text.slice(segment, next);
         if (chunks === null) fieldValue = base + tail;
         else {
@@ -79,12 +80,12 @@ export function run(input) {
         pos = next + 1;
         line += 1;
         fieldEnd = LINE_BREAK;
-        fieldAdded = added;
+        fieldAdded = trackAdded ? added : 0;
         return LINE_BREAK;
       }
 
       if (next + 1 < length && text.charCodeAt(next + 1) === 10) {
-        added += next - segment;
+        if (trackAdded) added += next - segment;
         const tail = text.slice(segment, next);
         if (chunks === null) fieldValue = base + tail;
         else {
@@ -94,12 +95,12 @@ export function run(input) {
         pos = next + 2;
         line += 1;
         fieldEnd = LINE_BREAK;
-        fieldAdded = added;
+        fieldAdded = trackAdded ? added : 0;
         return LINE_BREAK;
       }
 
       addError('stray_cr');
-      added += next - segment;
+      if (trackAdded) added += next - segment;
       if (chunks === null) chunks = [base, text.slice(segment, next)];
       else chunks.push(text.slice(segment, next));
       pos = next + 1;
@@ -117,17 +118,18 @@ export function run(input) {
     let close = -1;
 
     while (pos < length) {
-      let next = text.indexOf('"', pos);
-      const cr = text.indexOf('\r', pos);
-      if (cr !== -1 && (next === -1 || cr < next)) next = cr;
-      const lf = text.indexOf('\n', pos);
-      if (lf !== -1 && (next === -1 || lf < next)) next = lf;
-      if (next === -1) {
+      let next = pos;
+      let code = 0;
+      while (next < length) {
+        code = text.charCodeAt(next);
+        if (code === 34 || code === 13 || code === 10) break;
+        next++;
+      }
+      if (next === length) {
         pos = length;
         break;
       }
 
-      const code = text.charCodeAt(next);
       if (code === 34) {
         if (next + 1 < length && text.charCodeAt(next + 1) === 34) {
           if (chunks === null) chunks = [];
@@ -194,7 +196,7 @@ export function run(input) {
       return LINE_BREAK;
     }
 
-    const ended = readUnquoted(fieldValue);
+    const ended = readUnquoted(fieldValue, true);
     if (fieldAdded > 0) addError('quote_junk');
     return ended;
   }
