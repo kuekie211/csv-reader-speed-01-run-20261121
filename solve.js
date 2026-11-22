@@ -4,7 +4,6 @@
 const COMMA = 0;
 const LINE_BREAK = 1;
 const END = 2;
-const EMPTY_ROWS = Array.from({ length: 19 }, (_, n) => new Array(n).fill(''));
 
 export function run(input) {
   const text = String(input.text);
@@ -218,7 +217,7 @@ export function run(input) {
 
     recordLine = line;
     recordRow = hasHeader && columns === null ? null : rows.length;
-    const fields = width < 0 ? [] : width < EMPTY_ROWS.length ? EMPTY_ROWS[width].slice() : new Array(width).fill('');
+    const fields = [];
     let fieldCount = 0;
     let quoted = false;
     let ended;
@@ -239,7 +238,7 @@ export function run(input) {
 
     if (fieldCount < width) {
       errors.push({ code: 'short_row', line: recordLine, row: recordRow, fields: fieldCount });
-      // The prefilled trailing cells already supply the required padding.
+      while (fields.length < width) fields.push('');
     } else if (fieldCount > width) {
       errors.push({ code: 'long_row', line: recordLine, row: recordRow, extra: fields.slice(width) });
       fields.length = width;
